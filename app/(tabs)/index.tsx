@@ -41,12 +41,12 @@ const HouseModel: React.FC<HouseProps> = ({ setRoofHeight }) => {
 
     // Compute bounding box to determine the roof height
     const boundingBox = new THREE.Box3().setFromObject(scene);
-    const height = boundingBox.max.y - boundingBox.min.y; // Correct height calculation
+    const height = boundingBox.max.y - boundingBox.min.y;
 
-    setRoofHeight(height * 0.95); // Adjust the height slightly
+    setRoofHeight(height * 1.8); // Adjust height based on new scale
   }, [scene, setRoofHeight]);
 
-  return <primitive object={scene} position={[0, -0.5, 0]} scale={2} />;
+  return <primitive object={scene} position={[0, -0.5, 0]} scale={10} />; // 🔥 Increase scale here
 };
 
 const HomeScreen: React.FC = () => {
