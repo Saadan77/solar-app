@@ -43,7 +43,7 @@ const HouseModel: React.FC<HouseProps> = ({ setRoofHeight }) => {
     const boundingBox = new THREE.Box3().setFromObject(scene);
     const height = boundingBox.max.y - boundingBox.min.y;
 
-    setRoofHeight(height * 1.8); // Adjust height based on new scale
+    setRoofHeight(boundingBox.max.y);
   }, [scene, setRoofHeight]);
 
   return <primitive object={scene} position={[0, -0.5, 0]} scale={10} />; // 🔥 Increase scale here
@@ -75,17 +75,15 @@ const HomeScreen: React.FC = () => {
           <SolarPanel
             key={`${row}-${col}`}
             position={[
-              col * (panelSize.width + spacing) -
-                ((cols - 1) * (panelSize.width + spacing)) / 2,
-              roofHeight + 0.05, // ✅ Adjusted placement closer to the roof
-              row * (panelSize.height + spacing) -
-                ((rows - 1) * (panelSize.height + spacing)) / 2,
+              col * (panelSize.width + spacing) - ((cols - 1) * (panelSize.width + spacing)) / 2,
+              roofHeight + 0.1, // 🔥 Increased height slightly
+              row * (panelSize.height + spacing) - ((rows - 1) * (panelSize.height + spacing)) / 2,
             ]}
           />
         ))
       ),
     [rows, cols, roofHeight]
-  );
+  );  
 
   return (
     <View style={styles.container}>
