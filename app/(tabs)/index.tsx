@@ -36,20 +36,27 @@ const HouseModel: React.FC<HouseProps> = ({ setRoofHeight }) => {
     setRoofHeight(boundingBox.max.y);
   }, [scene, scene.children.length]);
 
-  return <primitive object={scene} position={[0, -0.5, 0]} scale={10} />; // 🔥 Increase scale here
+  return <primitive object={scene} position={[0, -0.5, 0]} scale={15} />;
 };
 
 const HomeScreen: React.FC = () => {
   const [rows, setRows] = useState<number>(3);
   const [cols, setCols] = useState<number>(4);
-  const [roofHeight, setRoofHeight] = useState<number>(0); // Fixed roof height from model
-  const [panelHeight, setPanelHeight] = useState<number>(0); // Adjustable height via slider
+  const [roofHeight, setRoofHeight] = useState<number>(0);
+  const [panelHeight, setPanelHeight] = useState<number>(0);
+
+  // Solar Panel Specs
+  const panelWattage: number = 400;
+  const panelEfficiency: number = 0.2;
+  const sunlightHours: number = 5;
 
   const panelSize = { width: 1.6, height: 1 };
   const spacing: number = 0.2;
 
-  const totalPanels = rows * cols;
-  const totalPower = totalPanels * 400 * 0.2 * 5;
+  // Calculate total solar output
+  const totalPanels: number = rows * cols;
+  const totalPower: number =
+    totalPanels * panelWattage * panelEfficiency * sunlightHours;
 
   // Adjust panel placement dynamically
   const panels = useMemo(
