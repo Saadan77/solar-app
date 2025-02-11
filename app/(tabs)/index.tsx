@@ -3,13 +3,14 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF, useTexture } from "@react-three/drei";
 import { View, Text, StyleSheet } from "react-native";
 import Slider from "@react-native-community/slider";
+import * as THREE from "three";
 
 type SolarPanelProps = {
   position: [number, number, number];
 };
 
 const SolarPanel: React.FC<SolarPanelProps> = ({ position }) => {
-  const solarTexture  = useTexture("/models/solar-panel.jpg");
+  const solarTexture = useTexture("/models/solar-panel.jpg");
 
   return (
     <mesh position={position} castShadow>
@@ -23,16 +24,35 @@ const SolarPanel: React.FC<SolarPanelProps> = ({ position }) => {
   );
 };
 
-const HouseModel = () => {
-  const { scene } = useGLTF("/models/houses.glb");
+type HouseProps = {
+  setRoofHeight: (height: number) => void; // ✅ Accept prop to set roof height
+};
+
+const HouseModel: React.FC<HouseProps> = ({ setRoofHeight }) => {
+  const { scene } = useGLTF("/models/modern_house.glb");
+
+  useMemo(() => {
+    scene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
+    // Compute bounding box to determine the roof height
+    const boundingBox = new THREE.Box3().setFromObject(scene);
+    const height = boundingBox.max.y - boundingBox.min.y; // Correct height calculation
+
+    setRoofHeight(height * 0.95); // Adjust the height slightly
+  }, [scene, setRoofHeight]);
+
   return <primitive object={scene} position={[0, -0.5, 0]} scale={2} />;
 };
 
 const HomeScreen: React.FC = () => {
-  const [roofWidth, setRoofWidth] = useState<number>(10);
-  const [roofDepth, setRoofDepth] = useState<number>(10);
   const [rows, setRows] = useState<number>(3);
   const [cols, setCols] = useState<number>(4);
+  const [roofHeight, setRoofHeight] = useState<number>(0); // NEW: Store roof height
 
   // Solar Panel Specs
   const panelWattage: number = 400;
@@ -57,14 +77,14 @@ const HomeScreen: React.FC = () => {
             position={[
               col * (panelSize.width + spacing) -
                 ((cols - 1) * (panelSize.width + spacing)) / 2,
-              2.6, // Adjust height for realistic placement on roof
+              roofHeight + 0.05, // ✅ Adjusted placement closer to the roof
               row * (panelSize.height + spacing) -
                 ((rows - 1) * (panelSize.height + spacing)) / 2,
             ]}
           />
         ))
       ),
-    [rows, cols, roofWidth, roofDepth]
+    [rows, cols, roofHeight]
   );
 
   return (
@@ -82,35 +102,13 @@ const HomeScreen: React.FC = () => {
           shadow-mapSize={[2048, 2048]}
         />
         <OrbitControls enableDamping dampingFactor={0.15} />
-        <HouseModel />
+        <HouseModel setRoofHeight={setRoofHeight} />{" "}
+        {/* ✅ Pass setter function */}
         {panels}
       </Canvas>
 
-      {/* Left-Side Controls */}
+      {/* UI Controls */}
       <View style={styles.controls}>
-        <Text style={styles.header}>Roof Size</Text>
-        <View style={styles.sliderContainer}>
-          <Text>Width: {roofWidth.toFixed(1)}m</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={5}
-            maximumValue={15}
-            step={0.5}
-            value={roofWidth}
-            onValueChange={setRoofWidth}
-          />
-        </View>
-        <View style={styles.sliderContainer}>
-          <Text>Depth: {roofDepth.toFixed(1)}m</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={5}
-            maximumValue={15}
-            step={0.5}
-            value={roofDepth}
-            onValueChange={setRoofDepth}
-          />
-        </View>
 
         <Text style={styles.header}>Solar Panel Grid</Text>
         <View style={styles.sliderContainer}>
