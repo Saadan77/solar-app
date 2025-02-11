@@ -32,19 +32,9 @@ const HouseModel: React.FC<HouseProps> = ({ setRoofHeight }) => {
   const { scene } = useGLTF("/models/modern_house.glb");
 
   useMemo(() => {
-    scene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-      }
-    });
-
-    // Compute bounding box to determine the roof height
     const boundingBox = new THREE.Box3().setFromObject(scene);
-    const height = boundingBox.max.y - boundingBox.min.y;
-
     setRoofHeight(boundingBox.max.y);
-  }, [scene, setRoofHeight]);
+  }, [scene, scene.children.length]);
 
   return <primitive object={scene} position={[0, -0.5, 0]} scale={10} />; // 🔥 Increase scale here
 };
@@ -52,22 +42,16 @@ const HouseModel: React.FC<HouseProps> = ({ setRoofHeight }) => {
 const HomeScreen: React.FC = () => {
   const [rows, setRows] = useState<number>(3);
   const [cols, setCols] = useState<number>(4);
-  const [roofHeight, setRoofHeight] = useState<number>(0); // NEW: Store roof height
-
-  // Solar Panel Specs
-  const panelWattage: number = 400;
-  const panelEfficiency: number = 0.2;
-  const sunlightHours: number = 5;
+  const [roofHeight, setRoofHeight] = useState<number>(0); // Fixed roof height from model
+  const [panelHeight, setPanelHeight] = useState<number>(0); // Adjustable height via slider
 
   const panelSize = { width: 1.6, height: 1 };
   const spacing: number = 0.2;
 
-  // Calculate total solar output
-  const totalPanels: number = rows * cols;
-  const totalPower: number =
-    totalPanels * panelWattage * panelEfficiency * sunlightHours;
+  const totalPanels = rows * cols;
+  const totalPower = totalPanels * 400 * 0.2 * 5;
 
-  // Adjust panel placement
+  // Adjust panel placement dynamically
   const panels = useMemo(
     () =>
       Array.from({ length: rows }).map((_, row) =>
@@ -75,15 +59,17 @@ const HomeScreen: React.FC = () => {
           <SolarPanel
             key={`${row}-${col}`}
             position={[
-              col * (panelSize.width + spacing) - ((cols - 1) * (panelSize.width + spacing)) / 2,
-              roofHeight + 0.1, // 🔥 Increased height slightly
-              row * (panelSize.height + spacing) - ((rows - 1) * (panelSize.height + spacing)) / 2,
+              col * (panelSize.width + spacing) -
+                ((cols - 1) * (panelSize.width + spacing)) / 2,
+              roofHeight + panelHeight, // ✅ Now properly updates via slider
+              row * (panelSize.height + spacing) -
+                ((rows - 1) * (panelSize.height + spacing)) / 2,
             ]}
           />
         ))
       ),
-    [rows, cols, roofHeight]
-  );  
+    [rows, cols, roofHeight, panelHeight]
+  );
 
   return (
     <View style={styles.container}>
@@ -100,14 +86,11 @@ const HomeScreen: React.FC = () => {
           shadow-mapSize={[2048, 2048]}
         />
         <OrbitControls enableDamping dampingFactor={0.15} />
-        <HouseModel setRoofHeight={setRoofHeight} />{" "}
-        {/* ✅ Pass setter function */}
+        <HouseModel setRoofHeight={setRoofHeight} />
         {panels}
       </Canvas>
 
-      {/* UI Controls */}
       <View style={styles.controls}>
-
         <Text style={styles.header}>Solar Panel Grid</Text>
         <View style={styles.sliderContainer}>
           <Text>Rows: {rows}</Text>
@@ -131,8 +114,18 @@ const HomeScreen: React.FC = () => {
             onValueChange={setCols}
           />
         </View>
+        <View style={styles.sliderContainer}>
+          <Text>Panel Height: {panelHeight.toFixed(1)}m</Text>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={2}
+            step={0.1}
+            value={panelHeight}
+            onValueChange={setPanelHeight} // ✅ Updates dynamically
+          />
+        </View>
 
-        {/* Solar Output Calculation */}
         <View style={styles.outputContainer}>
           <Text style={styles.outputText}>Total Panels: {totalPanels}</Text>
           <Text style={styles.outputText}>
