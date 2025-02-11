@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, SoftShadows } from "@react-three/drei";
+import { OrbitControls, useGLTF, useTexture } from "@react-three/drei";
 import { View, Text, StyleSheet } from "react-native";
 import Slider from "@react-native-community/slider";
 
@@ -8,42 +8,44 @@ type SolarPanelProps = {
   position: [number, number, number];
 };
 
-const SolarPanel: React.FC<SolarPanelProps> = ({ position }) => (
-  <mesh position={position} castShadow>
-    <boxGeometry args={[1.6, 0.1, 1]} />
-    <meshStandardMaterial color="blue" metalness={0.6} roughness={0.3} />
-  </mesh>
-);
+const SolarPanel: React.FC<SolarPanelProps> = ({ position }) => {
+  const solarTexture  = useTexture("/models/solar-panel.jpg");
 
-type RoofProps = {
-  width: number;
-  depth: number;
+  return (
+    <mesh position={position} castShadow>
+      <boxGeometry args={[1.6, 0.1, 1]} />
+      <meshStandardMaterial
+        map={solarTexture}
+        metalness={0.6}
+        roughness={0.3}
+      />
+    </mesh>
+  );
 };
 
-const Roof: React.FC<RoofProps> = ({ width, depth }) => (
-  <mesh position={[0, -0.05, 0]} receiveShadow>
-    <boxGeometry args={[width, 0.1, depth]} />
-    <meshStandardMaterial color="gray" />
-  </mesh>
-);
+const HouseModel = () => {
+  const { scene } = useGLTF("/models/houses.glb");
+  return <primitive object={scene} position={[0, -0.5, 0]} scale={2} />;
+};
 
-const HomeScreen = () => {
-  const [roofWidth, setRoofWidth] = useState(10);
-  const [roofDepth, setRoofDepth] = useState(10);
-  const [rows, setRows] = useState(3);
-  const [cols, setCols] = useState(4);
+const HomeScreen: React.FC = () => {
+  const [roofWidth, setRoofWidth] = useState<number>(10);
+  const [roofDepth, setRoofDepth] = useState<number>(10);
+  const [rows, setRows] = useState<number>(3);
+  const [cols, setCols] = useState<number>(4);
 
   // Solar Panel Specs
-  const panelWattage = 400;
-  const panelEfficiency = 0.20;
-  const sunlightHours = 5;
+  const panelWattage: number = 400;
+  const panelEfficiency: number = 0.2;
+  const sunlightHours: number = 5;
 
   const panelSize = { width: 1.6, height: 1 };
-  const spacing = 0.2;
+  const spacing: number = 0.2;
 
   // Calculate total solar output
-  const totalPanels = rows * cols;
-  const totalPower = totalPanels * panelWattage * panelEfficiency * sunlightHours;
+  const totalPanels: number = rows * cols;
+  const totalPower: number =
+    totalPanels * panelWattage * panelEfficiency * sunlightHours;
 
   // Adjust panel placement
   const panels = useMemo(
@@ -53,9 +55,11 @@ const HomeScreen = () => {
           <SolarPanel
             key={`${row}-${col}`}
             position={[
-              col * (panelSize.width + spacing) - ((cols - 1) * (panelSize.width + spacing)) / 2,
-              0.1,
-              row * (panelSize.height + spacing) - ((rows - 1) * (panelSize.height + spacing)) / 2,
+              col * (panelSize.width + spacing) -
+                ((cols - 1) * (panelSize.width + spacing)) / 2,
+              2.6, // Adjust height for realistic placement on roof
+              row * (panelSize.height + spacing) -
+                ((rows - 1) * (panelSize.height + spacing)) / 2,
             ]}
           />
         ))
@@ -65,12 +69,20 @@ const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Canvas style={styles.canvas} shadows camera={{ position: [10, 10, 10], fov: 50 }}>
-        <SoftShadows />
+      <Canvas
+        style={styles.canvas}
+        shadows
+        camera={{ position: [10, 10, 10], fov: 50 }}
+      >
         <ambientLight intensity={0.4} />
-        <directionalLight position={[5, 10, 5]} intensity={2} castShadow shadow-mapSize={[2048, 2048]} />
+        <directionalLight
+          position={[5, 10, 5]}
+          intensity={2}
+          castShadow
+          shadow-mapSize={[2048, 2048]}
+        />
         <OrbitControls enableDamping dampingFactor={0.15} />
-        <Roof width={roofWidth} depth={roofDepth} />
+        <HouseModel />
         {panels}
       </Canvas>
 
@@ -127,7 +139,9 @@ const HomeScreen = () => {
         {/* Solar Output Calculation */}
         <View style={styles.outputContainer}>
           <Text style={styles.outputText}>Total Panels: {totalPanels}</Text>
-          <Text style={styles.outputText}>Estimated Power Output: {totalPower.toFixed(2)} kWh/day</Text>
+          <Text style={styles.outputText}>
+            Estimated Power Output: {totalPower.toFixed(2)} kWh/day
+          </Text>
         </View>
       </View>
     </View>
