@@ -1,17 +1,20 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF, useTexture } from "@react-three/drei";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Dimensions } from "react-native";
 import Slider from "@react-native-community/slider";
 import * as THREE from "three";
 import modernHouse from "../../assets/models/modern_house.glb";
 import { Asset } from "expo-asset";
+import { CameraView, useCameraPermissions } from "expo-camera";
 
 const solarTextureUri = Asset.fromModule(require("../../assets/models/solar-panel.jpg")).uri;
 
 type SolarPanelProps = {
   position: [number, number, number];
 };
+
+const { width, height } = Dimensions.get("window");
 
 const SolarPanel: React.FC<SolarPanelProps> = ({ position }) => {
   const solarTexture = useTexture(solarTextureUri); // ✅ Pass as URI
@@ -24,67 +27,82 @@ const SolarPanel: React.FC<SolarPanelProps> = ({ position }) => {
   );
 };
 
-type HouseProps = {
-  setRoofHeight: (height: number) => void; // ✅ Accept prop to set roof height
-};
-
-const HouseModel: React.FC<HouseProps> = ({ setRoofHeight }) => {
-  const { scene } = useGLTF(modernHouse);
-
-  useEffect(() => {
-    if (!scene) return;
-    const boundingBox = new THREE.Box3().setFromObject(scene);
-    setRoofHeight(boundingBox.max.y);
-  }, [scene]);
-
-  return <primitive object={scene} position={[0, -0.5, 0]} scale={15} />;
-};
-
 const HomeScreen: React.FC = () => {
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [rows, setRows] = useState<number>(3);
   const [cols, setCols] = useState<number>(4);
-  const [roofHeight, setRoofHeight] = useState<number>(0);
-  const [panelHeight, setPanelHeight] = useState<number>(0);
+  const [panelHeight, setPanelHeight] = useState<number>(0.2); // Default height above roof
+
+  const [permission, requestPermission] = useCameraPermissions();
 
   // Solar Panel Specs
-  const panelWattage: number = 400;
-  const panelEfficiency: number = 0.2;
-  const sunlightHours: number = 5;
-
+  const panelWattage = 400;
+  const panelEfficiency = 0.2;
+  const sunlightHours = 5;
   const panelSize = { width: 1.6, height: 1 };
-  const spacing: number = 0.2;
+  const spacing = 0.2;
+
+  // Request camera permission
+  useEffect(() => {
+    (async () => {
+      if (!permission) {
+        const { status } = await requestPermission();
+        console.log("Camera permission status:", status);
+        setHasPermission(status === "granted");
+      } else {
+        setHasPermission(permission.granted);
+      }
+    })();
+  }, [permission, requestPermission]);
 
   // Calculate total solar output
-  const totalPanels: number = rows * cols;
-  const totalPower: number =
+  const totalPanels = rows * cols;
+  const totalPower =
     totalPanels * panelWattage * panelEfficiency * sunlightHours;
 
-  // Adjust panel placement dynamically
-  const panels = useMemo(
-    () =>
-      Array.from({ length: rows }).map((_, row) =>
-        Array.from({ length: cols }).map((_, col) => (
-          <SolarPanel
-            key={`${row}-${col}`}
-            position={[
-              col * (panelSize.width + spacing) -
-                ((cols - 1) * (panelSize.width + spacing)) / 2,
-              roofHeight + panelHeight, // ✅ Now properly updates via slider
-              row * (panelSize.height + spacing) -
-                ((rows - 1) * (panelSize.height + spacing)) / 2,
-            ]}
-          />
-        ))
-      ),
-    [rows, cols, roofHeight, panelHeight]
-  );
+  // Generate solar panels dynamically
+  const panels = useMemo(() => {
+    return Array.from({ length: rows }).map((_, row) =>
+      Array.from({ length: cols }).map((_, col) => (
+        <SolarPanel
+          key={`${row}-${col}`}
+          position={[
+            col * (panelSize.width + spacing) -
+              ((cols - 1) * (panelSize.width + spacing)) / 2,
+            panelHeight, // Panels float above the detected plane
+            row * (panelSize.height + spacing) -
+              ((rows - 1) * (panelSize.height + spacing)) / 2,
+          ]}
+        />
+      ))
+    );
+  }, [rows, cols, panelHeight]);
+
+  if (hasPermission === null) {
+    return (
+      <View>
+        <Text>Requesting camera permission...</Text>
+      </View>
+    );
+  }
+  if (hasPermission === false) {
+    return (
+      <View>
+        <Text>No access to camera</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
+      {/* Camera Feed */}
+      <CameraView style={styles.camera} facing="back" />
+
+      {/* Overlay Canvas with Solar Panels */}
       <Canvas
         style={styles.canvas}
         shadows
-        camera={{ position: [10, 10, 10], fov: 50 }}
+        camera={{ position: [0, 5, 10], fov: 50 }}
       >
         <ambientLight intensity={0.4} />
         <directionalLight
@@ -94,10 +112,10 @@ const HomeScreen: React.FC = () => {
           shadow-mapSize={[2048, 2048]}
         />
         <OrbitControls enableDamping dampingFactor={0.15} />
-        <HouseModel setRoofHeight={setRoofHeight} />
         {panels}
       </Canvas>
 
+      {/* Controls */}
       <View style={styles.controls}>
         <Text style={styles.header}>Solar Panel Grid</Text>
         <View style={styles.sliderContainer}>
@@ -130,10 +148,9 @@ const HomeScreen: React.FC = () => {
             maximumValue={2}
             step={0.1}
             value={panelHeight}
-            onValueChange={setPanelHeight} // ✅ Updates dynamically
+            onValueChange={setPanelHeight}
           />
         </View>
-
         <View style={styles.outputContainer}>
           <Text style={styles.outputText}>Total Panels: {totalPanels}</Text>
           <Text style={styles.outputText}>
@@ -147,7 +164,23 @@ const HomeScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  canvas: { flex: 1 },
+  camera: {
+    flex: 1,
+    width: width,
+    height: height,
+    position: "absolute",
+    top: 0,
+    left: 0,
+  },
+  canvas: {
+    flex: 1,
+    backgroundColor: "transparent",
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: width,
+    height: height,
+  },
   controls: {
     position: "absolute",
     left: 10,
@@ -168,9 +201,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
     textAlign: "center",
   },
-  sliderContainer: {
-    marginBottom: 10,
-  },
+  sliderContainer: { marginBottom: 10 },
   slider: { width: "100%", height: 30 },
   outputContainer: {
     marginTop: 10,
@@ -179,10 +210,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
   },
-  outputText: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
+  outputText: { fontSize: 14, fontWeight: "bold" },
 });
 
 export default HomeScreen;
