@@ -1,28 +1,33 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls, useGLTF, useTexture } from "@react-three/drei";
-import { View, Text, StyleSheet, Dimensions } from "react-native";
+import { OrbitControls } from "@react-three/drei";
+import { View, Text, StyleSheet, Dimensions, Platform } from "react-native";
 import Slider from "@react-native-community/slider";
-import * as THREE from "three";
-import modernHouse from "../../assets/models/modern_house.glb";
 import { Asset } from "expo-asset";
 import { CameraView, useCameraPermissions } from "expo-camera";
-
-const solarTextureUri = Asset.fromModule(require("../../assets/models/solar-panel.jpg")).uri;
-
-type SolarPanelProps = {
-  position: [number, number, number];
-};
+import * as THREE from "three";
 
 const { width, height } = Dimensions.get("window");
 
-const SolarPanel: React.FC<SolarPanelProps> = ({ position }) => {
-  const solarTexture = useTexture(solarTextureUri); // ✅ Pass as URI
+const SolarPanel: React.FC<{ position: [number, number, number] }> = ({
+  position,
+}) => {
+  const solarTextureUri =
+    Platform.OS === "web"
+      ? require("../../assets/models/solar-panel.jpg")
+      : Asset.fromModule(require("../../assets/models/solar-panel.jpg")).uri;
+
+  const textureLoader = new THREE.TextureLoader();
+  const solarTexture = useMemo(() => textureLoader.load(solarTextureUri), [solarTextureUri]);
 
   return (
     <mesh position={position} castShadow>
       <boxGeometry args={[1.6, 0.1, 1]} />
-      <meshStandardMaterial map={solarTexture} metalness={0.6} roughness={0.3} />
+      <meshStandardMaterial
+        map={solarTexture}
+        metalness={0.6}
+        roughness={0.3}
+      />
     </mesh>
   );
 };
@@ -31,23 +36,20 @@ const HomeScreen: React.FC = () => {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [rows, setRows] = useState<number>(3);
   const [cols, setCols] = useState<number>(4);
-  const [panelHeight, setPanelHeight] = useState<number>(0.2); // Default height above roof
+  const [panelHeight, setPanelHeight] = useState<number>(0.2);
 
   const [permission, requestPermission] = useCameraPermissions();
 
-  // Solar Panel Specs
   const panelWattage = 400;
   const panelEfficiency = 0.2;
   const sunlightHours = 5;
   const panelSize = { width: 1.6, height: 1 };
   const spacing = 0.2;
 
-  // Request camera permission
   useEffect(() => {
     (async () => {
       if (!permission) {
         const { status } = await requestPermission();
-        console.log("Camera permission status:", status);
         setHasPermission(status === "granted");
       } else {
         setHasPermission(permission.granted);
@@ -55,50 +57,34 @@ const HomeScreen: React.FC = () => {
     })();
   }, [permission, requestPermission]);
 
-  // Calculate total solar output
   const totalPanels = rows * cols;
-  const totalPower =
-    totalPanels * panelWattage * panelEfficiency * sunlightHours;
+  const totalPower = totalPanels * panelWattage * panelEfficiency * sunlightHours;
 
-  // Generate solar panels dynamically
   const panels = useMemo(() => {
-    return Array.from({ length: rows }).map((_, row) =>
-      Array.from({ length: cols }).map((_, col) => (
-        <SolarPanel
-          key={`${row}-${col}`}
-          position={[
-            col * (panelSize.width + spacing) -
-              ((cols - 1) * (panelSize.width + spacing)) / 2,
-            panelHeight, // Panels float above the detected plane
-            row * (panelSize.height + spacing) -
-              ((rows - 1) * (panelSize.height + spacing)) / 2,
-          ]}
-        />
-      ))
-    );
+    const result = [];
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        result.push(
+          <SolarPanel
+            key={`${row}-${col}`}
+            position={[
+              col * (panelSize.width + spacing) - ((cols - 1) * (panelSize.width + spacing)) / 2,
+              panelHeight,
+              row * (panelSize.height + spacing) - ((rows - 1) * (panelSize.height + spacing)) / 2,
+            ]}
+          />
+        );
+      }
+    }
+    return result;
   }, [rows, cols, panelHeight]);
 
-  if (hasPermission === null) {
-    return (
-      <View>
-        <Text>Requesting camera permission...</Text>
-      </View>
-    );
-  }
-  if (hasPermission === false) {
-    return (
-      <View>
-        <Text>No access to camera</Text>
-      </View>
-    );
-  }
+  if (hasPermission === null) return <Text>Requesting permission...</Text>;
+  if (hasPermission === false) return <Text>No camera access</Text>;
 
   return (
     <View style={styles.container}>
-      {/* Camera Feed */}
       <CameraView style={styles.camera} facing="back" />
-
-      {/* Overlay Canvas with Solar Panels */}
       <Canvas
         style={styles.canvas}
         shadows
@@ -114,8 +100,6 @@ const HomeScreen: React.FC = () => {
         <OrbitControls enableDamping dampingFactor={0.15} />
         {panels}
       </Canvas>
-
-      {/* Controls */}
       <View style={styles.controls}>
         <Text style={styles.header}>Solar Panel Grid</Text>
         <View style={styles.sliderContainer}>
@@ -154,7 +138,7 @@ const HomeScreen: React.FC = () => {
         <View style={styles.outputContainer}>
           <Text style={styles.outputText}>Total Panels: {totalPanels}</Text>
           <Text style={styles.outputText}>
-            Estimated Power Output: {totalPower.toFixed(2)} kWh/day
+            Estimated Power: {totalPower.toFixed(2)} kWh/day
           </Text>
         </View>
       </View>
@@ -166,8 +150,8 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   camera: {
     flex: 1,
-    width: width,
-    height: height,
+    width,
+    height,
     position: "absolute",
     top: 0,
     left: 0,
@@ -178,8 +162,8 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 0,
     left: 0,
-    width: width,
-    height: height,
+    width,
+    height,
   },
   controls: {
     position: "absolute",
