@@ -12,13 +12,18 @@
     "ios": {
       "supportsTablet": true
     },
+    "platforms": [
+      "android"
+    ],
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.android_solar",
-      "permissions": ["CAMERA"],
+      "permissions": [
+        "CAMERA"
+      ],
       "versionCode": 1
     },
     "web": {
@@ -41,6 +46,16 @@
     "experiments": {
       "typedRoutes": true
     },
-    "assetBundlePatterns": ["**/*"]
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "a85d5638-5f3f-46bc-80ee-66e3a9f2a5a5"
+      }
+    }
   }
 }

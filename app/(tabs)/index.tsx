@@ -1,27 +1,64 @@
-import React, { useState, useMemo, useEffect } from "react";
-import { Canvas } from "@react-three/fiber";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { View, Text, StyleSheet, Dimensions, Platform } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+} from "react-native";
 import Slider from "@react-native-community/slider";
-import { Asset } from "expo-asset";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as THREE from "three";
 
 const { width, height } = Dimensions.get("window");
 
-const SolarPanel: React.FC<{ position: [number, number, number] }> = ({
-  position,
-}) => {
-  const solarTextureUri =
-    Platform.OS === "web"
-      ? require("../../assets/models/solar-panel.jpg")
-      : Asset.fromModule(require("../../assets/models/solar-panel.jpg")).uri;
+const GroundPlane = () => {
+  return (
+    <mesh
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[0, -0.05, 0]}
+      receiveShadow
+    >
+      <planeGeometry args={[20, 20]} />
+      <meshStandardMaterial color="#d3d3d3" roughness={0.8} metalness={0.1} />
+    </mesh>
+  );
+};
 
-  const textureLoader = new THREE.TextureLoader();
-  const solarTexture = useMemo(() => textureLoader.load(solarTextureUri), [solarTextureUri]);
+const SolarPanel = ({ position, captured }) => {
+  const solarTexture = useMemo(
+    () =>
+      new THREE.TextureLoader().load(
+        require("../../assets/models/solar-panel.jpg")
+      ),
+    []
+  );
+  const meshRef = useRef<THREE.Mesh>(null);
+  const [currentY, setCurrentY] = useState(position[1]);
+
+  useFrame((_, delta) => {
+    if (meshRef.current && captured) {
+      // Only animate when captured
+      const targetY = 0; // Always animate to ground when captured
+      const diff = targetY - currentY;
+      const newY = currentY + diff * Math.min(delta * 0.5, 1); // Slower animation speed
+      setCurrentY(newY);
+      meshRef.current.position.y = newY;
+    } else if (meshRef.current && !captured) {
+      // Instant update when not captured, matching X behavior
+      setCurrentY(position[1]);
+      meshRef.current.position.y = position[1];
+    }
+  });
 
   return (
-    <mesh position={position} castShadow>
+    <mesh
+      ref={meshRef}
+      position={position as [number, number, number]}
+      castShadow
+    >
       <boxGeometry args={[1.6, 0.1, 1]} />
       <meshStandardMaterial
         map={solarTexture}
@@ -32,19 +69,14 @@ const SolarPanel: React.FC<{ position: [number, number, number] }> = ({
   );
 };
 
-const HomeScreen: React.FC = () => {
+const HomeScreen = () => {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
-  const [rows, setRows] = useState<number>(3);
-  const [cols, setCols] = useState<number>(4);
-  const [panelHeight, setPanelHeight] = useState<number>(0.2);
-
+  const [rows, setRows] = useState<number>(2);
+  const [cols, setCols] = useState<number>(2);
+  const [xOffset, setXOffset] = useState<number>(0);
+  const [yOffset, setYOffset] = useState<number>(2);
+  const [captured, setCaptured] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
-
-  const panelWattage = 400;
-  const panelEfficiency = 0.2;
-  const sunlightHours = 5;
-  const panelSize = { width: 1.6, height: 1 };
-  const spacing = 0.2;
 
   useEffect(() => {
     (async () => {
@@ -55,36 +87,34 @@ const HomeScreen: React.FC = () => {
         setHasPermission(permission.granted);
       }
     })();
-  }, [permission, requestPermission]);
-
-  const totalPanels = rows * cols;
-  const totalPower = totalPanels * panelWattage * panelEfficiency * sunlightHours;
+  }, [permission]);
 
   const panels = useMemo(() => {
     const result = [];
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
+        const x = col * 1.8 - ((cols - 1) * 1.8) / 2 + xOffset;
+        const z = row * 1.2 - ((rows - 1) * 1.2) / 2;
+        const y = yOffset;
+
         result.push(
           <SolarPanel
             key={`${row}-${col}`}
-            position={[
-              col * (panelSize.width + spacing) - ((cols - 1) * (panelSize.width + spacing)) / 2,
-              panelHeight,
-              row * (panelSize.height + spacing) - ((rows - 1) * (panelSize.height + spacing)) / 2,
-            ]}
+            position={[x, y, z] as [number, number, number]}
+            captured={captured}
           />
         );
       }
     }
     return result;
-  }, [rows, cols, panelHeight]);
+  }, [rows, cols, xOffset, yOffset, captured]);
 
   if (hasPermission === null) return <Text>Requesting permission...</Text>;
   if (hasPermission === false) return <Text>No camera access</Text>;
 
   return (
     <View style={styles.container}>
-      <CameraView style={styles.camera} facing="back" />
+      {!captured && <CameraView style={styles.camera} facing="back" />}
       <Canvas
         style={styles.canvas}
         shadows
@@ -95,67 +125,79 @@ const HomeScreen: React.FC = () => {
           position={[5, 10, 5]}
           intensity={2}
           castShadow
-          shadow-mapSize={[2048, 2048]}
+          shadow-mapSize={[1024, 1024]}
         />
         <OrbitControls enableDamping dampingFactor={0.15} />
+        {captured && <GroundPlane />}
         {panels}
       </Canvas>
-      <View style={styles.controls}>
-        <Text style={styles.header}>Solar Panel Grid</Text>
-        <View style={styles.sliderContainer}>
-          <Text>Rows: {rows}</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={1}
-            maximumValue={8}
-            step={1}
-            value={rows}
-            onValueChange={setRows}
-          />
+      {!captured && (
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => setCaptured(true)}
+        >
+          <Text style={styles.buttonText}>Capture</Text>
+        </TouchableOpacity>
+      )}
+      {!captured && (
+        <View style={styles.controls}>
+          <View style={styles.controlRow}>
+            <Text style={styles.controlLabel}>Rows: {rows}</Text>
+            <Slider
+              style={styles.slider}
+              minimumValue={1}
+              maximumValue={8}
+              step={1}
+              value={rows}
+              onValueChange={setRows}
+            />
+          </View>
+          <View style={styles.controlRow}>
+            <Text style={styles.controlLabel}>Columns: {cols}</Text>
+            <Slider
+              style={styles.slider}
+              minimumValue={1}
+              maximumValue={8}
+              step={1}
+              value={cols}
+              onValueChange={setCols}
+            />
+          </View>
+          <View style={styles.controlRow}>
+            <Text style={styles.controlLabel}>
+              X Position: {xOffset.toFixed(1)}
+            </Text>
+            <Slider
+              style={styles.slider}
+              minimumValue={-5}
+              maximumValue={5}
+              step={0.1}
+              value={xOffset}
+              onValueChange={setXOffset}
+            />
+          </View>
+          <View style={styles.controlRow}>
+            <Text style={styles.controlLabel}>
+              Y Position: {yOffset.toFixed(1)}
+            </Text>
+            <Slider
+              style={styles.slider}
+              minimumValue={0}
+              maximumValue={5}
+              step={0.1}
+              value={yOffset}
+              onValueChange={setYOffset}
+            />
+          </View>
         </View>
-        <View style={styles.sliderContainer}>
-          <Text>Columns: {cols}</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={1}
-            maximumValue={8}
-            step={1}
-            value={cols}
-            onValueChange={setCols}
-          />
-        </View>
-        <View style={styles.sliderContainer}>
-          <Text>Panel Height: {panelHeight.toFixed(1)}m</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={2}
-            step={0.1}
-            value={panelHeight}
-            onValueChange={setPanelHeight}
-          />
-        </View>
-        <View style={styles.outputContainer}>
-          <Text style={styles.outputText}>Total Panels: {totalPanels}</Text>
-          <Text style={styles.outputText}>
-            Estimated Power: {totalPower.toFixed(2)} kWh/day
-          </Text>
-        </View>
-      </View>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  camera: {
-    flex: 1,
-    width,
-    height,
-    position: "absolute",
-    top: 0,
-    left: 0,
-  },
+  camera: { flex: 1, width, height, position: "absolute", top: 0, left: 0 },
   canvas: {
     flex: 1,
     backgroundColor: "transparent",
@@ -165,36 +207,39 @@ const styles = StyleSheet.create({
     width,
     height,
   },
+  button: {
+    position: "absolute",
+    bottom: 200,
+    left: width / 2 - 50,
+    width: 100,
+    height: 50,
+    backgroundColor: "blue",
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 10,
+  },
+  buttonText: { color: "white", fontSize: 18, fontWeight: "bold" },
   controls: {
     position: "absolute",
-    left: 10,
-    top: 50,
-    width: 160,
+    bottom: 0,
+    width: width,
     backgroundColor: "rgba(255, 255, 255, 0.9)",
     padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
+    borderTopWidth: 1,
     borderColor: "#ddd",
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
   },
-  header: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 5,
-    textAlign: "center",
-  },
-  sliderContainer: { marginBottom: 10 },
-  slider: { width: "100%", height: 30 },
-  outputContainer: {
-    marginTop: 10,
-    padding: 8,
-    backgroundColor: "#e8f5e9",
-    borderRadius: 8,
+  controlRow: {
+    flexDirection: "row",
     alignItems: "center",
+    marginVertical: 5,
   },
-  outputText: { fontSize: 14, fontWeight: "bold" },
+  controlLabel: {
+    width: 120,
+    fontSize: 14,
+  },
+  slider: {
+    flex: 1,
+  },
 });
 
 export default HomeScreen;
